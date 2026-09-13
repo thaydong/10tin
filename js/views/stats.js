@@ -1,8 +1,8 @@
 'use strict';
 
-import { STORAGE_KEY, defaultState, uid } from './config.js';
-import { nowTime } from './utils.js';
-import { saveStateToGoogleSheet, fetchStateFromGoogleSheet } from './googlesheet.js';
+import { STORAGE_KEY, defaultState, uid } from '../config.js';
+import { nowTime } from '../utils.js';
+import { saveStateToGoogleSheet, fetchStateFromGoogleSheet } from '../googlesheet.js';
 
 let state = null;
 
