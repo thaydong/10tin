@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build & Deploy
+.vercel/
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Logs & Temporary
+*.log
+.env
+.env.local
