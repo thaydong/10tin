@@ -83,22 +83,28 @@ export function renderHeader() {
 
   if (pageTitle) pageTitle.textContent = t;
   if (pageSubtitle) pageSubtitle.textContent = s;
+  
+  const cls = activeClass();
+  const classesList = (state.classes && state.classes.length > 0) ? state.classes : [cls];
+
   if (classSwitcher) {
-    classSwitcher.innerHTML = state.classes
-      .map(c => `<option value="${c.id}" ${c.id === state.activeClassId ? 'selected' : ''}>${esc(c.name)} · ${classStudentsFor(c.id).length} HS</option>`)
+    classSwitcher.innerHTML = classesList
+      .map(c => `<option value="${c.id}" ${c.id === cls.id ? 'selected' : ''}>${esc(c.name)} · ${classStudentsFor(c.id).length} HS</option>`)
       .join('');
   }
-  if (teacherNameMini) teacherNameMini.textContent = state.teacher.name;
-  if (teacherRoleMini) teacherRoleMini.textContent = state.teacher.role + ' · ' + state.teacher.subject;
+
+  const teacherObj = state.teacher || { name: 'Lê Văn Đông', role: 'GVCN', subject: 'Tin học' };
+  if (teacherNameMini) teacherNameMini.textContent = teacherObj.name || 'Giáo viên';
+  if (teacherRoleMini) teacherRoleMini.textContent = (teacherObj.role || 'GVCN') + ' · ' + (teacherObj.subject || 'Môn học');
 
   const brandLogo = document.querySelector('.brand-logo');
   if (brandLogo) {
-    brandLogo.textContent = classBadgeName(activeClass().name);
+    brandLogo.textContent = classBadgeName(cls.name);
   }
 
   const tAvatarMini = document.getElementById('teacherAvatarMini');
   if (tAvatarMini) {
-    tAvatarMini.outerHTML = renderAvatar(state.teacher, 'avatar').replace('class="avatar"', 'class="avatar" id="teacherAvatarMini"');
+    tAvatarMini.outerHTML = renderAvatar(teacherObj, 'avatar').replace('class="avatar"', 'class="avatar" id="teacherAvatarMini"');
   }
 
   const authBtn = document.getElementById('authBtn');
@@ -159,29 +165,42 @@ export function renderPage() {
   void root.offsetWidth;
   root.classList.add('fade-in');
 
-  const fn =
-    {
-      home: renderHome,
-      classes: renderClasses,
-      teachers: renderTeachers,
-      students: renderStudents,
-      attendance: renderAttendance,
-      violations: renderViolations,
-      commendations: renderCommendations,
-      seating: renderSeating,
-      timetable: renderTimetable,
-      rewards: renderRewards,
-      wheel: renderWheel,
-      film: renderFilm,
-      noise: renderNoise,
-      countdown: renderCountdown,
-      links: renderLinks,
-      stats: renderStats,
-      data: renderData,
-      settings: renderSettings
-    }[state.currentPage] || renderHome;
+  try {
+    const fn =
+      {
+        home: renderHome,
+        classes: renderClasses,
+        teachers: renderTeachers,
+        students: renderStudents,
+        attendance: renderAttendance,
+        violations: renderViolations,
+        commendations: renderCommendations,
+        seating: renderSeating,
+        timetable: renderTimetable,
+        rewards: renderRewards,
+        wheel: renderWheel,
+        film: renderFilm,
+        noise: renderNoise,
+        countdown: renderCountdown,
+        links: renderLinks,
+        stats: renderStats,
+        data: renderData,
+        settings: renderSettings
+      }[state.currentPage] || renderHome;
 
-  root.innerHTML = fn();
+    root.innerHTML = fn();
+  } catch (err) {
+    console.error('Error rendering page:', err);
+    root.innerHTML = `
+      <div class="alert alert-danger m-4 p-4 rounded-3 shadow-sm text-center">
+        <h4 class="fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Đã xảy ra lỗi khi hiển thị</h4>
+        <p class="mb-3 text-muted">${esc(err.message || 'Không thể tải dữ liệu trang.')}</p>
+        <button class="btn btn-primary" onclick="localStorage.removeItem('lopHocVuiVeTeal_lop91_v2'); location.reload();">
+          <i class="fa-solid fa-rotate me-1"></i>Khôi phục dữ liệu mặc định
+        </button>
+      </div>
+    `;
+  }
   setTimeout(afterRender, 0);
 }
 
@@ -206,14 +225,17 @@ export function toggleAuth() {
       <form onsubmit="window.app.processLogin(event)">
         <div class="mb-3">
           <label class="form-label fw-bold">Tài khoản</label>
-          <input type="text" id="loginUser" class="form-control" required placeholder="Nhập tài khoản quản trị">
+          <input type="text" id="loginUser" class="form-control" required placeholder="Nhập tài khoản (admin)">
         </div>
-        <div class="mb-4">
+        <div class="mb-3">
           <label class="form-label fw-bold">Mật khẩu</label>
-          <input type="password" id="loginPass" class="form-control" required placeholder="Nhập mật khẩu">
+          <input type="password" id="loginPass" class="form-control" required placeholder="Nhập mật khẩu (chuyenltt123)">
+        </div>
+        <div class="mb-3 p-2 bg-light rounded text-muted small border">
+          <i class="fa-solid fa-shield-halved text-primary me-1"></i>Tài khoản mặc định: <b>admin</b> | Mật khẩu: <b>chuyenltt123</b>
         </div>
         <div class="text-end">
-          <button type="submit" class="btn btn-primary px-4">Đăng nhập</button>
+          <button type="submit" class="btn btn-primary px-4"><i class="fa-solid fa-right-to-bracket me-1"></i>Đăng nhập</button>
         </div>
       </form>
     `;
@@ -462,10 +484,11 @@ function startApp() {
     window.app.mainModal = mainModal;
   }
 
-  // Tự động mở khoá quyền quản trị mặc định cho Giáo viên
-  if (sessionStorage.getItem('isLoggedIn') === null) {
-    sessionStorage.setItem('isLoggedIn', 'true');
-  }
+  // Mặc định khi truy cập vào luôn ở chế độ ĐĂNG XUẤT
+  sessionStorage.removeItem('isLoggedIn');
+
+  const state = getState();
+  state.currentPage = 'home';
 
   buildNav();
   renderHeader();
