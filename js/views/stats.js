@@ -1,158 +1,207 @@
 'use strict';
 
-import { STORAGE_KEY, defaultState, uid } from '../config.js';
-import { nowTime } from '../utils.js';
-import { saveStateToGoogleSheet, fetchStateFromGoogleSheet } from '../googlesheet.js';
+import { getState, activeClass, classStudents } from '../state.js';
+import { esc, downloadXlsx, toast } from '../utils.js';
+import { rankRow } from './home.js';
 
-let state = null;
-
-export function loadState() {
-  try {
-    const x = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (x && x.version) {
-      state = x;
-      // Auto-migrate default class name if it was 9/1
-      const c91 = state.classes?.find(c => c.name === '9/1');
-      if (c91) {
-        c91.name = '10 Chuyên Tin';
-        c91.grade = 'Khối 10';
-      }
-      if (!state.timetable || !state.timetable.entries || state.timetable.entries.length === 0) {
-        state.timetable = defaultState().timetable;
-      }
-      if (!state.teachers) state.teachers = [];
-      if (!state.students) state.students = [];
-      if (!state.classes) state.classes = defaultState().classes;
-      if (!state.attendance) state.attendance = {};
-      if (!state.violations) state.violations = {};
-      if (!state.commendations) state.commendations = {};
-      if (!state.links) state.links = [];
-      if (!state.rewards) state.rewards = [];
-      if (!state.transactions) state.transactions = [];
-      if (!state.redemptions) state.redemptions = [];
-      if (!state.wheelHistory) state.wheelHistory = [];
-      if (!state.filmHistory) state.filmHistory = [];
-    } else {
-      state = defaultState();
-    }
-  } catch (e) {
-    state = defaultState();
-  }
-  return state;
+export function txRow(x) {
+  return `
+    <tr data-subject="${esc(x.subject)}" data-search="${esc((x.studentName + ' ' + x.reason).toLowerCase())}">
+      <td>${new Date(x.time).toLocaleString('vi-VN')}</td>
+      <td>${esc(x.studentName)}</td>
+      <td>${esc(x.subject)}</td>
+      <td>${esc(x.reason)}</td>
+      <td><span class="badge ${x.amount >= 0 ? 'bg-success' : 'bg-danger'}">${x.amount >= 0 ? '+' : ''}${x.amount}</span></td>
+    </tr>
+  `;
 }
 
-// Initialize state after variable declaration
-state = loadState();
-
-export function getState() {
-  if (!state) {
-    state = loadState();
-  }
-  return state;
-}
-
-export function getTheme() {
-  const s = getState();
-  return s.theme || (s.settings && s.settings.theme) || localStorage.getItem('gvcn_theme') || 'teal';
-}
-
-export function applyTheme(themeName) {
-  const t = themeName || getTheme();
-  document.documentElement.setAttribute('data-theme', t);
-  const label = document.getElementById('themeToggleLabel');
-  const btn = document.getElementById('themeToggleBtn');
-  if (label) {
-    label.textContent = t === 'warm' ? 'Theme Nâu Ấm' : 'Theme Xanh';
-  }
-  if (btn) {
-    btn.setAttribute('title', t === 'warm' ? 'Chuyển sang Theme Xanh hệ thống' : 'Chuyển sang Theme Nâu Ấm mới');
-  }
-}
-
-export function toggleTheme() {
-  const current = getTheme();
-  const next = current === 'warm' ? 'teal' : 'warm';
-  setTheme(next);
-}
-
-export function setTheme(nextTheme) {
-  const s = getState();
-  s.theme = nextTheme;
-  if (!s.settings) s.settings = {};
-  s.settings.theme = nextTheme;
-  localStorage.setItem('gvcn_theme', nextTheme);
-  applyTheme(nextTheme);
-  saveState(false);
-  if (window.renderHeader) window.renderHeader();
-  if (window.renderPage) window.renderPage();
-}
-
-export function setState(newState) {
-  state = newState;
-  return state;
-}
-
-export async function syncFromGoogleSheet(onSuccessCallback) {
-  const remoteState = await fetchStateFromGoogleSheet();
-  if (remoteState && remoteState.version) {
-    state = remoteState;
-    if (!state.students) state.students = [];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    if (typeof onSuccessCallback === 'function') {
-      onSuccessCallback();
-    }
-  }
-}
-
-export function saveState(show = true) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (e) {
-    console.error('LocalStorage write error:', e);
-  }
-
-  const p = document.getElementById('savePill');
-  if (p) {
-    p.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i>Đã lưu ${nowTime()}`;
-  }
-
-  // Sync to Google Sheet in background (non-blocking)
-  saveStateToGoogleSheet(state).then(success => {
-    if (success && p) {
-      p.innerHTML = `<i class="fa-solid fa-cloud-check me-1"></i>Đã lưu Sheet ${nowTime()}`;
-    }
+export function filterTxTable() {
+  const sub = document.getElementById('txSubjectFilter')?.value || '';
+  const q = (document.getElementById('txSearch')?.value || '').toLowerCase();
+  document.querySelectorAll('#txTable tbody tr').forEach(r => {
+    const show = (!sub || r.dataset.subject === sub) && r.dataset.search.includes(q);
+    r.style.display = show ? '' : 'none';
   });
 }
 
-export function activeClass() {
-  const s = getState();
-  return s.classes.find(c => c.id === s.activeClassId) || s.classes[0];
-}
+export function drawStatsCharts(chartRefs) {
+  const state = getState();
+  const isWarm = document.documentElement.getAttribute('data-theme') === 'warm';
+  const ss = classStudents();
+  const tx = (state.transactions || []).filter(x => x.classId === state.activeClassId);
+  const m = ss.filter(s => s.gender === 'Nam').length;
+  const f = ss.filter(s => s.gender === 'Nữ').length;
+  const o = Math.max(0, ss.length - m - f);
 
-export function classStudents() {
-  const s = getState();
-  return s.students.filter(x => x.classId === s.activeClassId);
-}
+  const g = document.getElementById('genderChart');
+  if (g && window.Chart) {
+    const genderColors = isWarm ? ['#ea580c', '#fbbf24', '#78350f'] : ['#0ea5e9', '#f472b6', '#94a3b8'];
+    chartRefs.push(new Chart(g, {
+      type: 'doughnut',
+      data: {
+        labels: ['Nam', 'Nữ', 'Khác'],
+        datasets: [{ data: [m, f, o], backgroundColor: genderColors }]
+      },
+      options: { maintainAspectRatio: false }
+    }));
+  }
 
-export function classStudentsFor(id) {
-  const s = getState();
-  return s.students.filter(x => x.classId === id);
-}
-
-export function logTransaction(studentId, amount, reason = 'Điều chỉnh xu', subject = 'Ghi chung / Nề nếp') {
-  const s = getState();
-  const st = s.students.find(x => x.id === studentId);
-  if (!st) return;
-  st.coins = Math.max(0, (st.coins || 0) + amount);
-  s.transactions.unshift({
-    id: uid('tx'),
-    classId: st.classId,
-    studentId,
-    studentName: st.name,
-    amount,
-    reason,
-    subject,
-    time: new Date().toISOString()
+  const map = {};
+  tx.forEach(x => {
+    map[x.subject] = (map[x.subject] || 0) + x.amount;
   });
-  saveState(false);
+
+  const sc = document.getElementById('subjectChart');
+  if (sc && window.Chart) {
+    const subjectBg = isWarm ? 'rgba(234, 88, 12, 0.75)' : 'rgba(20,184,166,.7)';
+    chartRefs.push(new Chart(sc, {
+      type: 'bar',
+      data: {
+        labels: Object.keys(map),
+        datasets: [{ label: 'Xu ròng', data: Object.values(map), backgroundColor: subjectBg, borderRadius: 7 }]
+      },
+      options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    }));
+  }
+}
+
+export function renderStats() {
+  const state = getState();
+  const ss = classStudents();
+  const tx = (state.transactions || []).filter(x => x.classId === state.activeClassId).slice(0, 18);
+  const winner = [...ss].sort((a, b) => (b.coins || 0) - (a.coins || 0))[0] || null;
+  const totalCoins = ss.reduce((sum, s) => sum + (s.coins || 0), 0);
+  const subjectOptions = [...new Set((state.transactions || []).filter(x => x.classId === state.activeClassId).map(x => x.subject))]
+    .map(subject => `<option value="${esc(subject)}">${esc(subject)}</option>`)
+    .join('');
+
+  const rowsHtml = tx.length ? tx.map(x => txRow(x)).join('') : '<tr><td colspan="5" class="text-center text-muted">Chưa có giao dịch nào</td></tr>';
+
+  return `
+    <div class="section-head">
+      <div>
+        <h2><i class="fa-solid fa-chart-column text-primary me-2"></i>Thống kê & Báo cáo</h2>
+        <p>Theo dõi xu thi đua, học lực và tiến độ của lớp học.</p>
+      </div>
+    </div>
+
+    <div class="stats-grid mb-3">
+      <div class="stat-card">
+        <div class="label">Sĩ số</div>
+        <div class="value">${ss.length}</div>
+        <small>${activeClass()?.name || 'Lớp học'}</small>
+        <i class="fa-solid fa-users"></i>
+      </div>
+      <div class="stat-card">
+        <div class="label">Tổng xu</div>
+        <div class="value">${totalCoins}</div>
+        <small>${tx.length} giao dịch gần đây</small>
+        <i class="fa-solid fa-coins"></i>
+      </div>
+      <div class="stat-card">
+        <div class="label">Top học sinh</div>
+        <div class="value">${winner ? esc(winner.name) : '—'}</div>
+        <small>${winner ? `${winner.coins || 0} xu` : 'Chưa có dữ liệu'}</small>
+        <i class="fa-solid fa-award"></i>
+      </div>
+      <div class="stat-card">
+        <div class="label">Đang theo dõi</div>
+        <div class="value">${new Set((state.transactions || []).map(x => x.subject)).size}</div>
+        <small>môn / nhóm</small>
+        <i class="fa-solid fa-chart-simple"></i>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-lg-6">
+        <div class="card p-3">
+          <h5 class="fw-bold mb-3">Phân bổ giới tính</h5>
+          <div style="height: 240px;">
+            <canvas id="genderChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card p-3">
+          <h5 class="fw-bold mb-3">Xu theo môn / nhóm</h5>
+          <div style="height: 240px;">
+            <canvas id="subjectChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h5 class="fw-bold m-0">Bảng giao dịch</h5>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+          <select id="txSubjectFilter" class="form-select form-select-sm" style="width: 180px;">
+            <option value="">Tất cả</option>
+            ${subjectOptions}
+          </select>
+          <input id="txSearch" class="form-control form-control-sm" style="width: 220px;" placeholder="Tìm học sinh / lý do" />
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table id="txTable" class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Thời gian</th>
+              <th>Học sinh</th>
+              <th>Môn</th>
+              <th>Lý do</th>
+              <th>Xu</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+export function exportStatsXlsx() {
+  const state = getState();
+  const rows = (state.transactions || []).filter(x => x.classId === state.activeClassId).map(x => ({
+    Thời_gian: new Date(x.time).toLocaleString('vi-VN'),
+    Học_sinh: x.studentName,
+    Môn: x.subject,
+    Lý_do: x.reason,
+    Xu: x.amount
+  }));
+
+  if (!rows.length) {
+    toast('Chưa có dữ liệu để xuất Excel', 'info');
+    return;
+  }
+
+  downloadXlsx([['Giao dịch', rows]], 'bao-cao-thong-ke.xlsx');
+}
+
+export function exportStatsPDF() {
+  if (!window.jspdf) {
+    toast('Trình duyệt chưa hỗ trợ PDF', 'warning');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const state = getState();
+  const rows = (state.transactions || []).filter(x => x.classId === state.activeClassId);
+
+  doc.setFontSize(16);
+  doc.text('Báo cáo thống kê lớp học', 14, 16);
+  doc.setFontSize(10);
+  doc.text(`Tổng giao dịch: ${rows.length}`, 14, 26);
+  let y = 38;
+  rows.slice(0, 20).forEach(x => {
+    const text = `${new Date(x.time).toLocaleDateString('vi-VN')} - ${x.studentName} - ${x.amount} xu`;
+    doc.text(text, 14, y);
+    y += 8;
+  });
+  doc.save('bao-cao-thong-ke.pdf');
 }
