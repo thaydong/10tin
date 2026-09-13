@@ -96,15 +96,18 @@ export function drawHomeChart(chartRefs) {
   const chart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: ss.map(s => s.name.split(' ').slice(-2).join(' ')),
+      labels: ss.map(s => {
+        const parts = s.name.trim().split(' ');
+        return parts.length >= 2 ? parts.slice(-2).join(' ') : s.name;
+      }),
       datasets: [{
         label: 'Xu thi đua',
         data: ss.map(s => s.coins || 0),
         backgroundColor: bgColor,
         hoverBackgroundColor: hoverBgColor,
-        borderRadius: { topLeft: 8, topRight: 8, bottomLeft: 0, bottomRight: 0 },
+        borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
         borderSkipped: false,
-        maxBarThickness: 32,
+        maxBarThickness: 22,
         categoryPercentage: 0.8,
         barPercentage: 0.85
       }]
@@ -116,11 +119,15 @@ export function drawHomeChart(chartRefs) {
         legend: { display: false },
         tooltip: {
           backgroundColor: '#1e293b',
-          titleFont: { family: "'Be Vietnam Pro', sans-serif", size: 13, weight: 'bold' },
-          bodyFont: { family: "'Be Vietnam Pro', sans-serif", size: 12 },
-          padding: 10,
+          titleFont: { family: "'Be Vietnam Pro', sans-serif", size: 12, weight: 'bold' },
+          bodyFont: { family: "'Be Vietnam Pro', sans-serif", size: 11 },
+          padding: 8,
           cornerRadius: 8,
           callbacks: {
+            title: (items) => {
+              const idx = items[0].dataIndex;
+              return ss[idx] ? ss[idx].name : items[0].label;
+            },
             label: (context) => ` Xu thi đua: ${context.parsed.y} xu`
           }
         }
@@ -128,11 +135,12 @@ export function drawHomeChart(chartRefs) {
       scales: {
         x: {
           grid: {
-            color: 'rgba(226, 232, 240, 0.7)',
+            display: false,
             drawBorder: false
           },
           ticks: {
-            font: { family: "'Be Vietnam Pro', sans-serif", size: 11, weight: '600' },
+            autoSkip: false,
+            font: { family: "'Be Vietnam Pro', sans-serif", size: 10, weight: '600' },
             color: '#64748b',
             maxRotation: 45,
             minRotation: 35
@@ -145,7 +153,7 @@ export function drawHomeChart(chartRefs) {
             drawBorder: false
           },
           ticks: {
-            font: { family: "'Be Vietnam Pro', sans-serif", size: 11, weight: '600' },
+            font: { family: "'Be Vietnam Pro', sans-serif", size: 10, weight: '600' },
             color: '#64748b',
             precision: 0
           }
