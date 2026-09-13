@@ -20,21 +20,10 @@ export function loadState() {
       if (!state.timetable || !state.timetable.entries || state.timetable.entries.length === 0) {
         state.timetable = defaultState().timetable;
       }
+      if (!state.classes || !Array.isArray(state.classes) || state.classes.length === 0) state.classes = defaultState().classes;
+      if (!state.teacher || typeof state.teacher !== 'object') state.teacher = defaultState().teacher;
       if (!state.teachers) state.teachers = [];
       if (!state.students) state.students = [];
-      const defaultSts = defaultState().students;
-      const cSts = state.students.filter(s => s.classId === (state.activeClassId || 'class_10ctin'));
-      if (cSts.length < 15) {
-        defaultSts.forEach(ds => {
-          if (!state.students.some(s => s.id === ds.id || s.name === ds.name)) {
-            state.students.push(ds);
-          }
-        });
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } catch(e) {}
-      }
-      if (!state.classes) state.classes = defaultState().classes;
       if (!state.attendance) state.attendance = {};
       if (!state.violations) state.violations = {};
       if (!state.commendations) state.commendations = {};
@@ -109,17 +98,7 @@ export async function syncFromGoogleSheet(onSuccessCallback) {
   if (remoteState && remoteState.version) {
     state = remoteState;
     if (!state.students) state.students = [];
-    const defaultSts = defaultState().students;
-    const cSts = state.students.filter(s => s.classId === (state.activeClassId || 'class_10ctin'));
-    if (cSts.length < 15) {
-      defaultSts.forEach(ds => {
-        if (!state.students.some(s => s.id === ds.id || s.name === ds.name)) {
-          state.students.push(ds);
-        }
-      });
-    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    saveState(false);
     if (typeof onSuccessCallback === 'function') {
       onSuccessCallback();
     }
@@ -148,17 +127,25 @@ export function saveState(show = true) {
 
 export function activeClass() {
   const s = getState();
-  return s.classes.find(c => c.id === s.activeClassId) || s.classes[0];
+  if (!s.classes || !Array.isArray(s.classes) || s.classes.length === 0) {
+    s.classes = [{ id: 'class_10ctin', name: '10 Chuyên Tin', grade: 'Khối 10', year: '2026 - 2027', color: '#0d9488' }];
+    s.activeClassId = 'class_10ctin';
+  }
+  const found = s.classes.find(c => c.id === s.activeClassId);
+  return found || s.classes[0] || { id: 'class_10ctin', name: '10 Chuyên Tin', grade: 'Khối 10', year: '2026 - 2027', color: '#0d9488' };
 }
 
 export function classStudents() {
   const s = getState();
-  return s.students.filter(x => x.classId === s.activeClassId);
+  const cls = activeClass();
+  if (!s.students || !Array.isArray(s.students)) s.students = [];
+  return s.students.filter(x => x && x.classId === cls.id);
 }
 
 export function classStudentsFor(id) {
   const s = getState();
-  return s.students.filter(x => x.classId === id);
+  if (!s.students || !Array.isArray(s.students)) return [];
+  return s.students.filter(x => x && x.classId === id);
 }
 
 export function logTransaction(studentId, amount, reason = 'Điều chỉnh xu', subject = 'Ghi chung / Nề nếp') {
