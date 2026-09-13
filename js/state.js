@@ -22,6 +22,18 @@ export function loadState() {
       }
       if (!state.teachers) state.teachers = [];
       if (!state.students) state.students = [];
+      const defaultSts = defaultState().students;
+      const cSts = state.students.filter(s => s.classId === (state.activeClassId || 'class_10ctin'));
+      if (cSts.length < 15) {
+        defaultSts.forEach(ds => {
+          if (!state.students.some(s => s.id === ds.id || s.name === ds.name)) {
+            state.students.push(ds);
+          }
+        });
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch(e) {}
+      }
       if (!state.classes) state.classes = defaultState().classes;
       if (!state.attendance) state.attendance = {};
       if (!state.violations) state.violations = {};
@@ -96,7 +108,18 @@ export async function syncFromGoogleSheet(onSuccessCallback) {
   const remoteState = await fetchStateFromGoogleSheet();
   if (remoteState && remoteState.version) {
     state = remoteState;
+    if (!state.students) state.students = [];
+    const defaultSts = defaultState().students;
+    const cSts = state.students.filter(s => s.classId === (state.activeClassId || 'class_10ctin'));
+    if (cSts.length < 15) {
+      defaultSts.forEach(ds => {
+        if (!state.students.some(s => s.id === ds.id || s.name === ds.name)) {
+          state.students.push(ds);
+        }
+      });
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    saveState(false);
     if (typeof onSuccessCallback === 'function') {
       onSuccessCallback();
     }
