@@ -1,6 +1,7 @@
 'use strict';
 
 import { NAV, PAGE_META } from './config.js';
+import { fetchStateFromGoogleSheet } from './googlesheet.js';
 import { getState, saveState, activeClass, classStudents, classStudentsFor, syncFromGoogleSheet, getTheme, applyTheme, toggleTheme, setTheme } from './state.js';
 import { esc, renderAvatar, toast, beep, toggleSidebar, classBadgeName } from './utils.js';
 
@@ -470,7 +471,9 @@ const appMethods = {
   resetAllData,
   saveTeacher,
   saveGoogleSheetForm,
-  editSubjects
+  editSubjects,
+  syncFromGoogleSheet,
+  fetchStateFromGoogleSheet
 };
 
 // Bind methods to window directly and window.app
